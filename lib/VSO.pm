@@ -6,7 +6,7 @@ use warnings 'all';
 use Carp 'confess';
 use base 'Exporter';
 
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 
 our @EXPORT = qw(
   has
@@ -24,6 +24,7 @@ sub import
   $^H |= 1538;
   my $class = shift;
   my $caller = caller;
+  return if $caller eq __PACKAGE__;
   no strict 'refs';
   map {
     *{"$caller\::$_"} = \&{$_};

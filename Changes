@@ -1,6 +1,9 @@
 
 Changelog for VSO
 
+2011-11-17      0.002
+  - Fixed recursive depency issue.
+
 2011-11-17      0.001
   - Initial release.
   - God help us.
