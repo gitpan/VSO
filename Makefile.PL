@@ -11,6 +11,7 @@ all_from 'lib/VSO.pm';
 test_requires 'Test::More'  => '0';
 
 requires 'Carp' => '0';
+requires 'Scalar::Util' => 0;
 
 tests_recursive();
 WriteAll();

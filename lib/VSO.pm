@@ -3,15 +3,17 @@ package VSO;
 
 use strict;
 use warnings 'all';
-use Carp 'confess';
+use Carp 'croak';
+use Scalar::Util qw( weaken );
 use base 'Exporter';
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 our @EXPORT = qw(
   has
-  before_update
-  after_update
+  before
+  after
+  around
   extends
 );
 
@@ -27,11 +29,13 @@ sub import
   return if $caller eq __PACKAGE__;
   no strict 'refs';
   map {
-    *{"$caller\::$_"} = \&{$_};
+    *{"$caller\::$_"} = \&{$_}
   } @EXPORT;
   push @{"$caller\::ISA"}, $class;
   
   $meta->{ $caller } ||= _new_meta();
+  no warnings 'redefine';
+  *{"$caller\::meta"} = sub { $meta->{$caller} };
 }# end import()
 
 
@@ -41,7 +45,7 @@ sub new
   
   my $s = bless \%args, $class;
   $s->_build();
-  $s->BUILD();
+  $s->BUILD() if $s->can('BUILD');
   
   return $s;
 }# end new()
@@ -54,17 +58,47 @@ sub _build
 {
   my $s = shift;
   
-  $meta->{ ref($s) } ||= _new_meta();
-  my $m = $meta->{ ref($s) };
+  my $class = ref($s);
+  my $m = $class->meta();
+  $m->{field_names} ||= [ sort keys %{ $m->{fields} } ];
   my $fields = $m->{fields};
   
-  foreach my $name ( sort keys %$fields )
+  FIELD: foreach my $name ( @{ $m->{field_names} } )
   {
-    my $field = $fields->{$name};
-    if( $field->{required} && (! defined($s->{$name}) ) && (! $field->{default}) )
+    my $props = $fields->{$name};
+    if( $props->{required} && (! defined($s->{$name}) ) && (! $props->{default}) )
     {
-      warn "Required param '$name' was not provided for new instance of '@{[ ref($s) ]}'"
+      croak "Required param '$name' was not provided for new instance of '@{[ ref($s) ]}'"
         unless defined($s->{$name});
+    }# end if()
+    
+    if( $props->{default} && ! exists($s->{$name}) )
+    {
+      if( $props->{lazy} )
+      {
+        next FIELD;
+      }
+      else
+      {
+        if( $props->{weak_ref} )
+        {
+          weaken($s->{$name} = $props->{default}->( $s ));
+        }
+        else
+        {
+          $s->{$name} = $props->{default}->( $s );
+        }# end if()
+      }# end if()
+    }# end if()
+    
+    my $new_value = $s->{$name};
+    if( $props->{isa} )
+    {
+      if( $props->{validate} )
+      {
+        croak "Invalid value for '$name' isn't a $props->{isa}: '$new_value'"
+          unless _check_value_isa( $props->{isa}, $new_value );
+      }# end if()
     }# end if()
   }# end foreach()
 }# end _build()
@@ -75,12 +109,11 @@ sub extends(@)
   my $class = caller;
   
   no strict 'refs';
-  $meta->{ $class } ||= _new_meta();
-  my $m = $meta->{ $class };
+  my $m = $class->meta();
   map {
     load_class( $_ );
     push @{"$class\::ISA"}, $_;
-    my $parent_meta = $meta->{$_} or die "Class $_ has no meta!";
+    my $parent_meta = $_->meta or die "Class $_ has no meta!";
     map {
       $m->{fields}->{$_} = $parent_meta->{fields}->{$_}
     } keys %{ $parent_meta->{fields} };
@@ -91,34 +124,34 @@ sub extends(@)
 }# end extends()
 
 
-sub before_update($@)
+sub before($&)
 {
   my $class = caller;
   my ($name, $sub) = @_;
-  $meta->{$class} ||= _new_meta();
+  my $meta = $class->meta;
   
   # Sanity:
-  confess "You must define property $class.$name before adding triggers to it"
-    unless exists($meta->{$class}->{fields}->{$name});
+  croak "You must define property $class.$name before adding triggers to it"
+    unless exists($meta->{fields}->{$name});
   
-  $meta->{$class}->{triggers}->{"before_update_$name"} ||= [ ];
-  push @{ $meta->{$class}->{triggers}->{"before_update_$name"} }, $sub;
-}# end before_update()
+  $meta->{triggers}->{"before.$name"} ||= [ ];
+  push @{ $meta->{triggers}->{"before.$name"} }, $sub;
+}# end before()
 
 
-sub after_update($@)
+sub after($&)
 {
   my $class = caller;
   my ($name, $sub) = @_;
-  $meta->{$class} ||= _new_meta();
+  my $meta = $class->meta;
   
   # Sanity:
-  confess "You must define property $class.$name before adding triggers to it"
-    unless exists($meta->{$class}->{fields}->{$name});
+  croak "You must define property $class.$name before adding triggers to it"
+    unless exists($meta->{fields}->{$name});
   
-  $meta->{$class}->{triggers}->{"after_update_$name"} ||= [ ];
-  push @{ $meta->{$class}->{triggers}->{"after_update_$name"} }, $sub;
-}# end after_update()
+  $meta->{triggers}->{"after.$name"} ||= [ ];
+  push @{ $meta->{triggers}->{"after.$name"} }, $sub;
+}# end after()
 
 
 sub has($;@)
@@ -126,12 +159,15 @@ sub has($;@)
   my $class = caller;
   my $name = shift;
   my %properties = @_;
-  $meta->{$class} ||= _new_meta();
+  my $meta = $class->meta;
   
-  my $props = $meta->{$class}->{fields}->{$name} = {
+  my $props = $meta->{fields}->{$name} = {
     is        => 'rw',
     required  => 1,
-    isa       => 'Any',
+    isa       => undef,
+    lazy      => 0,
+    weak_ref  => 0,
+    validate  => 1,
     %properties
   };
   
@@ -145,7 +181,14 @@ sub has($;@)
       # Support laziness:
       if( ( ! defined($s->{$name}) ) && $props->{default} )
       {
-        $s->{$name} = $props->{default}->( $s );
+        if( $props->{weak_ref} )
+        {
+          weaken($s->{$name} = $props->{default}->( $s ));
+        }
+        else
+        {
+          $s->{$name} = $props->{default}->( $s );
+        }# end if()
       }# end if()
       
       return $s->{$name};
@@ -153,47 +196,54 @@ sub has($;@)
     
     if( $props->{is} eq 'ro' )
     {
-      confess "Cannot change readonly property '$name'";
+      croak "Cannot change readonly property '$name'";
     }
     elsif( $props->{is} eq 'rw' )
     {
       my $new_value = shift;
+      my $old_value = $s->{$name};
       
       if( (! defined($new_value)) && $props->{required} )
       {
-        confess "Property '$name' cannot be null";
+        croak "Property '$name' cannot be null";
       }# end if()
       
       if( $props->{isa} )
       {
-        confess "New value for '$name' isn't a $props->{isa}: '$new_value'"
-          unless _check_value_isa( $props->{isa}, $new_value );
+        if( $props->{validate} )
+        {
+          croak "New value for '$name' isn't a $props->{isa}: '$new_value'"
+            unless _check_value_isa( $props->{isa}, $new_value );
+        }# end if()
       }# end if()
       
       if( $props->{where} )
       {
-        confess "Invalid value for property '$name': '$new_value'"
+        croak "Invalid value for property '$name': '$new_value'"
           unless $props->{where}->( $new_value );
       }# end if()
       
-      if( my $triggers = $meta->{$class}->{triggers}->{"before_update_$name"} )
+      if( my $triggers = $meta->{triggers}->{"before.$name"} )
       {
         map {
-          $_->( $s, $new_value, $s->{$name} );
+          $_->( $s, $new_value, $old_value );
         } @$triggers;
       }# end if()
       
-      # Mark our changes:
-      $s->{__Changed}->{$name}++;
-      $s->{__Changes}->{$name} = $s->{$name};
-      
       # Now change the value:
-      $s->{$name} = $new_value;
+      if( $props->{weak_ref} )
+      {
+        weaken($s->{$name} = $new_value);
+      }
+      else
+      {
+        $s->{$name} = $new_value;
+      }# end if()
       
-      if( my $triggers = $meta->{$class}->{triggers}->{"after_update_$name"} )
+      if( my $triggers = $meta->{triggers}->{"after.$name"} )
       {
         map {
-          $_->( $s, $s->{$name}, $new_value );
+          $_->( $s, $s->{$name}, $old_value);
         } @$triggers;
       }# end if()
       
@@ -206,46 +256,70 @@ sub has($;@)
 
 sub _check_value_isa
 {
-  my ($isa, $value) = @_;
+  my ($isa_raw, $value) = @_;
   
-  my ($reftype, $ref_isa) = $isa =~ m{((?:Array|Hash))Ref\[([^\]]+?)\]};
-  if( $reftype )
+  my $is_ok = 0;
+  foreach my $isa ( split /\|/, $isa_raw )
   {
-    # Make sure that it is the correct type of structure:
-    return unless uc($reftype) eq ref($value);
-    # Make sure that 
-  }
-  else
-  {
-    return 0 if ref($value) =~ m{^(ARRAY|HASH|SCALAR)};
-  }# end if()
+    last if $is_ok;
+    my ($reftype, $ref_isa) = $isa =~ m{((?:Array|Hash))Ref(?:\[([^\]]+?)\])?};
+    $reftype = uc($reftype);
+    if( $reftype && $ref_isa )
+    {
+      # Make sure that it is the correct type of structure:
+      next unless $reftype eq ref($value);
+      
+      # Make sure that the elements/values are the correct type of thing:
+      if( $reftype eq 'ARRAY' )
+      {
+        next if grep { ! ( $_->isa( $ref_isa ) || ref($_) eq $ref_isa ) } @$value;
+      }
+      elsif( $reftype eq 'HASH' )
+      {
+        next if grep { ! ( $_->isa( $ref_isa ) || ref($_) eq $ref_isa ) } values %$value;
+      }# end if()
+    }# end if()
+    
+    # Simple checks:
+    if( $isa eq 'Str' )
+    {
+      # No problem.
+      $is_ok++;
+    }
+    elsif( $isa eq 'Int' )
+    {
+      no warnings 'numeric';
+      next unless $value eq sprintf('%d', $value);
+    }
+    elsif( $isa eq 'Num' )
+    {
+      next unless $value =~ m{^\d+\.?\d*?$};
+    }
+    elsif( $isa eq 'CodeRef' )
+    {
+      next unless ref($value) eq 'CODE';
+    }
+    elsif( $isa eq 'HashRef' )
+    {
+      next unless ref($value) eq 'HASH';
+    }
+    elsif( $isa eq 'ArrayRef' )
+    {
+      next unless ref($value) eq 'ARRAY';
+    }
+    elsif( $isa eq 'ScalarRef' )
+    {
+      next unless ref($value) eq 'SCALAR';
+    }
+    elsif( $isa eq 'FileHandle' )
+    {
+      next unless UNIVERSAL::isa($value, 'IO::Handle') || ref($value) eq 'GLOB';
+    }# end if()
+    
+    $is_ok++;
+  }# end foreach()
   
-  # Simple checks:
-  if( $isa eq 'Str' )
-  {
-    # No problem.
-  }
-  elsif( $isa eq 'Int' )
-  {
-    return unless $value =~ m{^\d+$};
-  }
-  elsif( $isa eq 'Num' )
-  {
-    return unless $value =~ m{^\d+\.?\d*?$};
-  }
-  elsif( $isa eq 'CodeRef' )
-  {
-    return unless ref($value) eq 'CODE';
-  }
-  elsif( $isa eq 'FileHandle' )
-  {
-    return unless UNIVERSAL::isa($value, 'IO::Handle') || ref($value) eq 'GLOB';
-  }# end if()
-  
-  # More complicated checks:
-  
-  # Finally:
-  return 1;
+  return $is_ok;
 }# end _check_value_isa()
 
 
@@ -264,7 +338,8 @@ sub load_class
 
   (my $file = "$class.pm") =~ s|::|/|g;
   unless( $INC{$file} ) {
-    require $file;
+    eval { require $file };
+    $INC{$file} ||= $file;
   }# end unless();
   $class->import(@_);
 }# end load_class()
@@ -280,18 +355,64 @@ VSO - Very Small Objects
 
 =head1 SYNOPSIS
 
-  # TBD
+  package Plane;
+  
+  use VS;
+  
+  has 'width' => (
+    is        => 'ro',
+    isa       => 'Int',
+  );
+  
+  has 'height' => (
+    is        => 'ro',
+    isa       => 'Int',
+  );
+  
+  has 'points' => (
+    is        => 'rw',
+    isa       => 'ArrayRef[Point2d]',
+    required  => 0,
+  );
+
+
+  package Point2d;
+  
+  use VS:
+  
+  has 'plane' => (
+    is        => 'ro',
+    isa       => 'Plane',
+    weak_ref  => 1,
+  );
+  
+  has 'x' => (
+    is        => 'rw',
+    isa       => 'Int',
+  );
+  
+  has 'y' => (
+    is        => 'rw',
+    isa       => 'Int',
+  );
+  
+  before 'x' => sub {
+    my ($s, $new_value, $old_value) = @_;
+    die "x must be between 0 and '@{[ $s->plane->width ]}'
+      unless $new_value >= 0 && $new_value <= $s->plane->width;
+  };
+  
+  before 'y' => sub {
+    my ($s, $new_value, $old_value) = @_;
+    die "y must be between 0 and '@{[ $s->plane->height ]}'
+      unless $new_value >= 0 && $new_value <= $s->plane->height;
+  };
+
 
 =head1 DESCRIPTION
 
-VSO is L<Moose>-ish, offers slightly more than L<Mo> and doesn't strive for Moose-compatibility.
-
-Moose, Moo and Mo didn't quite do what I needed, so here's VSO.
-
-"What did I need?" you say?  I need something that I can make millions of instances
-of without wondering about side-effects.
-
-I<(Ducks, runs away...)>
+VSO aims to offer a declarative OO style for Perl with very little overhead, without
+being overly-minimalist.
 
 =head1 AUTHOR
 

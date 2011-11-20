@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               VSO
-version:            0.002
+version:            0.003
 abstract:           Very Small Objects
 author:
     - John Drago <jdrago_999@yahoo.com>
@@ -10,6 +10,7 @@ test_requires:
     Test::More:       0
 requires:
     Carp:             0
+    Scalar::Util      0
 recommends:
 no_index:
     directory:

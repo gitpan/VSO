@@ -1,6 +1,15 @@
 
 Changelog for VSO
 
+2011-11-19      0.003
+  - Value type-checking on constructor now works.
+  - 'before' and 'after' attribute modifiers now work.
+  - Not yet as fast as I want it to be.
+  - Type-checking now works for things like:
+    isa => 'ArrayRef[My::Thing]'
+    - and -
+    isa => 'HashRef[My::Thing]'
+
 2011-11-17      0.002
   - Fixed recursive depency issue.
 
