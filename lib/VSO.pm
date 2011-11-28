@@ -3,17 +3,16 @@ package VSO;
 
 use strict;
 use warnings 'all';
-use Carp 'croak';
+use Carp qw( confess croak );
 use Scalar::Util qw( weaken );
 use base 'Exporter';
 
-our $VERSION = '0.003';
+our $VERSION = '0.004';
 
 our @EXPORT = qw(
   has
   before
   after
-  around
   extends
 );
 
@@ -99,6 +98,13 @@ sub _build
         croak "Invalid value for '$name' isn't a $props->{isa}: '$new_value'"
           unless _check_value_isa( $props->{isa}, $new_value );
       }# end if()
+    }# end if()
+    
+    if( $props->{where} )
+    {
+      local $_ = $new_value;
+      confess "Invalid value for property '$name': '$new_value'"
+        unless $props->{where}->( $s );
     }# end if()
   }# end foreach()
 }# end _build()
@@ -219,8 +225,9 @@ sub has($;@)
       
       if( $props->{where} )
       {
-        croak "Invalid value for property '$name': '$new_value'"
-          unless $props->{where}->( $new_value );
+        local $_ = $new_value;
+        confess "Invalid value for property '$name': '$new_value'"
+          unless $props->{where}->( $s );
       }# end if()
       
       if( my $triggers = $meta->{triggers}->{"before.$name"} )
@@ -357,7 +364,7 @@ VSO - Very Small Objects
 
   package Plane;
   
-  use VS;
+  use VSO;
   
   has 'width' => (
     is        => 'ro',
@@ -378,7 +385,7 @@ VSO - Very Small Objects
 
   package Point2d;
   
-  use VS:
+  use VSO;
   
   has 'plane' => (
     is        => 'ro',
@@ -389,30 +396,49 @@ VSO - Very Small Objects
   has 'x' => (
     is        => 'rw',
     isa       => 'Int',
+    where     => sub {
+      my $s = shift;
+      $_ >= 0 && $_ <= $s->plane->width
+    }
   );
   
   has 'y' => (
     is        => 'rw',
     isa       => 'Int',
+    where     => sub {
+      my $s = shift;
+      $_ >= 0 && $_ <= $s->plane->height
+    }
   );
   
-  before 'x' => sub {
+  after 'x' => sub {
     my ($s, $new_value, $old_value) = @_;
-    die "x must be between 0 and '@{[ $s->plane->width ]}'
-      unless $new_value >= 0 && $new_value <= $s->plane->width;
-  };
+    warn "Moving $s from x$old_value to x$new_value";
+  }
   
-  before 'y' => sub {
+  after 'y' => sub {
     my ($s, $new_value, $old_value) = @_;
-    die "y must be between 0 and '@{[ $s->plane->height ]}'
-      unless $new_value >= 0 && $new_value <= $s->plane->height;
-  };
+    warn "Moving $s from y$old_value to y$new_value";
+  }
+  
+  package Point3d;
+  
+  use VSO;
+  
+  extends 'Point2d';
+  
+  has 'z' => (
+    is      => 'rw',
+    isa     => 'Int',
+  );
 
 
 =head1 DESCRIPTION
 
 VSO aims to offer a declarative OO style for Perl with very little overhead, without
 being overly-minimalist.
+
+B<NOTE:> This is not a drop-in replacement for Moose, Moo, Mo, Mouse or anything like that.
 
 =head1 AUTHOR
 

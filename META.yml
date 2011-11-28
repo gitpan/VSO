@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               VSO
-version:            0.003
+version:            0.004
 abstract:           Very Small Objects
 author:
     - John Drago <jdrago_999@yahoo.com>

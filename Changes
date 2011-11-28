@@ -1,7 +1,14 @@
 
 Changelog for VSO
 
-2011-11-19      0.003
+2011-11-28      v0.004
+  - Updated SYNOPSIS in POD.
+  - Added 'where' checking.
+  - For 'where', $_ is localized to the yet-to-be-validated value and $_[0] is the
+    object to which the attribute (which is validating the value) belongs.
+  - Several tweaks here and there.
+
+2011-11-19      v0.003
   - Value type-checking on constructor now works.
   - 'before' and 'after' attribute modifiers now work.
   - Not yet as fast as I want it to be.
@@ -9,11 +16,12 @@ Changelog for VSO
     isa => 'ArrayRef[My::Thing]'
     - and -
     isa => 'HashRef[My::Thing]'
+  - Type-checking slows things down...a lot.
 
-2011-11-17      0.002
+2011-11-17      v0.002
   - Fixed recursive depency issue.
 
-2011-11-17      0.001
+2011-11-17      v0.001
   - Initial release.
   - God help us.
 

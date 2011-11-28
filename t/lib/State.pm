@@ -7,6 +7,7 @@ has 'name' => (
   is        => 'ro',
   isa       => 'Str',
   required  => 1,
+  where     => sub { m{Colorado} }
 );
 
 has 'capital' => (
