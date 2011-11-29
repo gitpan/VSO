@@ -7,7 +7,7 @@ use Carp qw( confess croak );
 use Scalar::Util qw( weaken );
 use base 'Exporter';
 
-our $VERSION = '0.004';
+our $VERSION = '0.005';
 
 our @EXPORT = qw(
   has
@@ -30,7 +30,7 @@ sub import
   map {
     *{"$caller\::$_"} = \&{$_}
   } @EXPORT;
-  push @{"$caller\::ISA"}, $class;
+  push @{"$caller\::ISA"}, $class if $class eq __PACKAGE__;
   
   $meta->{ $caller } ||= _new_meta();
   no warnings 'redefine';
@@ -48,9 +48,6 @@ sub new
   
   return $s;
 }# end new()
-
-
-sub BUILD { }
 
 
 sub _build
@@ -93,14 +90,14 @@ sub _build
     my $new_value = $s->{$name};
     if( $props->{isa} )
     {
-      if( $props->{validate} )
+      if( $props->{required} )
       {
         croak "Invalid value for '$name' isn't a $props->{isa}: '$new_value'"
           unless _check_value_isa( $props->{isa}, $new_value );
       }# end if()
     }# end if()
     
-    if( $props->{where} )
+    if( $props->{where} && defined($new_value) )
     {
       local $_ = $new_value;
       confess "Invalid value for property '$name': '$new_value'"
@@ -358,7 +355,7 @@ sub load_class
 
 =head1 NAME
 
-VSO - Very Small Objects
+VSO - Very Simple Objects
 
 =head1 SYNOPSIS
 

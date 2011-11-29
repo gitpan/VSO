@@ -1,6 +1,9 @@
 
 Changelog for VSO
 
+2011-11-29      v0.005
+  - Fixed some minor issues with validating new values for object fields.
+
 2011-11-28      v0.004
   - Updated SYNOPSIS in POD.
   - Added 'where' checking.

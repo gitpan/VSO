@@ -1,7 +1,7 @@
 --- #YAML:1.0
 name:               VSO
-version:            0.004
-abstract:           Very Small Objects
+version:            0.005
+abstract:           Very Simple Objects
 author:
     - John Drago <jdrago_999@yahoo.com>
 license:            perl
