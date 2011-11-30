@@ -64,7 +64,7 @@ NORMAL: {
     );
   };
   ok $@, 'population as string in constructor causes failure';
-  like $@, qr(Invalid value for 'population' isn't a Int), 'error looks right';
+  like $@, qr(Invalid value for 'population' isn't a State::Population: 'a string'), 'error looks right';
   
   my $state = State->new( %args );
   ok $state, "Got a new state object";
@@ -81,7 +81,7 @@ NORMAL: {
   is $state->population, 8_500_000, 'state.population was changed';
   eval { $state->population('a string') };
   is $state->population, 8_500_000, 'state.population not changed';
-  like $@, qr(New value for 'population' isn't a Int), 'error looks right';
+  like $@, qr(New value for 'population' isn't a State::Population: 'a string'), 'error looks right';
   
 };
 

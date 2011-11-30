@@ -3,11 +3,21 @@ package State;
 
 use VSO;
 
+subtype 'State::Name' => 
+  as      'Str',
+  where   { length($_) > 0 },
+  message { 'Must have a length greater than zero' };
+
+subtype 'State::Population' =>
+  as      'Int',
+  where   { $_ > 0 },
+  message { "Population must be greater than zero" };
+
 has 'name' => (
   is        => 'ro',
-  isa       => 'Str',
+  isa       => 'State::Name',
   required  => 1,
-  where     => sub { m{Colorado} }
+  'where'     => sub { m{Colorado} }
 );
 
 has 'capital' => (
@@ -18,7 +28,7 @@ has 'capital' => (
 
 has 'population' => (
   is        => 'rw',
-  isa       => 'Int',
+  isa       => 'State::Population',
   required  => 1,
 );
 

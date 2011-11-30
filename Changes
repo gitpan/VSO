@@ -1,6 +1,9 @@
 
 Changelog for VSO
 
+2011-11-29      v0.006
+  - Added subtypes.
+
 2011-11-29      v0.005
   - Fixed some minor issues with validating new values for object fields.
 

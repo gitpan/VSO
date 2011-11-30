@@ -7,13 +7,15 @@ use Carp qw( confess croak );
 use Scalar::Util qw( weaken );
 use base 'Exporter';
 
-our $VERSION = '0.005';
+our $VERSION = '0.006';
 
 our @EXPORT = qw(
   has
   before
   after
   extends
+  
+  subtype as where message
 );
 
 my $meta = { };
@@ -92,8 +94,9 @@ sub _build
     {
       if( $props->{required} )
       {
-        croak "Invalid value for '$name' isn't a $props->{isa}: '$new_value'"
-          unless _check_value_isa( $props->{isa}, $new_value );
+        my $check = _check_value_isa( $props->{isa}, $s, $new_value );
+        croak "Invalid value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}"
+          unless $check eq 1;
       }# end if()
     }# end if()
     
@@ -215,8 +218,9 @@ sub has($;@)
       {
         if( $props->{validate} )
         {
-          croak "New value for '$name' isn't a $props->{isa}: '$new_value'"
-            unless _check_value_isa( $props->{isa}, $new_value );
+          my $check = _check_value_isa( $props->{isa}, $s, $new_value );
+          croak "New value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}"
+            unless $check eq 1;
         }# end if()
       }# end if()
       
@@ -260,7 +264,7 @@ sub has($;@)
 
 sub _check_value_isa
 {
-  my ($isa_raw, $value) = @_;
+  my ($isa_raw, $object, $value) = @_;
   
   my $is_ok = 0;
   foreach my $isa ( split /\|/, $isa_raw )
@@ -288,7 +292,7 @@ sub _check_value_isa
     if( $isa eq 'Str' )
     {
       # No problem.
-      $is_ok++;
+      $is_ok = 1;
     }
     elsif( $isa eq 'Int' )
     {
@@ -318,9 +322,25 @@ sub _check_value_isa
     elsif( $isa eq 'FileHandle' )
     {
       next unless UNIVERSAL::isa($value, 'IO::Handle') || ref($value) eq 'GLOB';
+    }
+    elsif( exists($meta->{_subtypes}->{$isa}) )
+    {
+      my $subtype = $meta->{_subtypes}->{$isa};
+      if( _check_value_isa( $subtype->{as}, $object, $value ) )
+      {
+        if( $subtype->{where} )
+        {
+          local $_ = $value;
+          return $subtype->{message}->( $object ) unless $subtype->{where}->( $object );
+        }# end if()
+      }
+      else
+      {
+        next;
+      }# end if()
     }# end if()
     
-    $is_ok++;
+    $is_ok = 1;
   }# end foreach()
   
   return $is_ok;
@@ -347,6 +367,26 @@ sub load_class
   }# end unless();
   $class->import(@_);
 }# end load_class()
+
+
+sub subtype($;@)
+{
+  my ($pkg, %args) = @_;
+  
+  confess "Subtype '$pkg' already exists"
+    if exists($meta->{_subtypes}->{$pkg});
+  $meta->{_subtypes}->{$pkg} = {
+    as      => $args{as},
+    where   => $args{where},
+    message => $args{message},
+  };
+}
+
+sub as          { as => shift, @_   }
+sub where(&)    { where => $_[0]    }
+sub message(&)  { message => $_[0]  }
+
+
 
 1;# return true:
 
@@ -384,6 +424,11 @@ VSO - Very Simple Objects
   
   use VSO;
   
+  subtype 'ValidValue' =>
+    as    'Int',
+    where { $_ >= 0 && $_ <= shift->plane->width },
+    message { 'Value must be between zero and ' . shift->plane-width }
+  
   has 'plane' => (
     is        => 'ro',
     isa       => 'Plane',
@@ -392,20 +437,12 @@ VSO - Very Simple Objects
   
   has 'x' => (
     is        => 'rw',
-    isa       => 'Int',
-    where     => sub {
-      my $s = shift;
-      $_ >= 0 && $_ <= $s->plane->width
-    }
+    isa       => 'ValidValue'
   );
   
   has 'y' => (
     is        => 'rw',
-    isa       => 'Int',
-    where     => sub {
-      my $s = shift;
-      $_ >= 0 && $_ <= $s->plane->height
-    }
+    isa       => 'ValidValue'
   );
   
   after 'x' => sub {
