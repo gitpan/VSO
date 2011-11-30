@@ -91,6 +91,8 @@ ALTERNATE_TYPES: {
     %args,
     func  => 'Hello'
   );
+  
+  $state->greet();
 };
 
 

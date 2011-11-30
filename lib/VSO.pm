@@ -7,7 +7,7 @@ use Carp qw( confess croak );
 use Scalar::Util qw( weaken );
 use base 'Exporter';
 
-our $VERSION = '0.006';
+our $VERSION = '0.007';
 
 our @EXPORT = qw(
   has
@@ -138,10 +138,23 @@ sub before($&)
   
   # Sanity:
   croak "You must define property $class.$name before adding triggers to it"
-    unless exists($meta->{fields}->{$name});
+    unless exists($meta->{fields}->{$name}) || $class->can($name);
   
-  $meta->{triggers}->{"before.$name"} ||= [ ];
-  push @{ $meta->{triggers}->{"before.$name"} }, $sub;
+  if( exists($meta->{fields}->{$name}) )
+  {
+    $meta->{triggers}->{"before.$name"} ||= [ ];
+    push @{ $meta->{triggers}->{"before.$name"} }, $sub;
+  }
+  else
+  {
+    my $orig = $class->can($name);
+    no strict 'refs';
+    no warnings 'redefine';
+    *{"$class\::$name"} = sub {
+      $sub->( @_ );
+      $orig->( @_ );
+    };
+  }# end if()
 }# end before()
 
 
@@ -153,10 +166,23 @@ sub after($&)
   
   # Sanity:
   croak "You must define property $class.$name before adding triggers to it"
-    unless exists($meta->{fields}->{$name});
+    unless exists($meta->{fields}->{$name}) || $class->can($name);
   
-  $meta->{triggers}->{"after.$name"} ||= [ ];
-  push @{ $meta->{triggers}->{"after.$name"} }, $sub;
+  if( exists($meta->{fields}->{$name}) )
+  {
+    $meta->{triggers}->{"after.$name"} ||= [ ];
+    push @{ $meta->{triggers}->{"after.$name"} }, $sub;
+  }
+  else
+  {
+    my $orig = $class->can($name);
+    no strict 'refs';
+    no warnings 'redefine';
+    *{"$class\::$name"} = sub {
+      $orig->( @_ );
+      $sub->( @_ );
+    };
+  }# end if()
 }# end after()
 
 
@@ -425,9 +451,9 @@ VSO - Very Simple Objects
   use VSO;
   
   subtype 'ValidValue' =>
-    as    'Int',
-    where { $_ >= 0 && $_ <= shift->plane->width },
-    message { 'Value must be between zero and ' . shift->plane-width }
+    as      'Int',
+    where   { $_ >= 0 && $_ <= shift->plane->width },
+    message { 'Value must be between zero and ' . shift->plane->width };
   
   has 'plane' => (
     is        => 'ro',
@@ -448,12 +474,12 @@ VSO - Very Simple Objects
   after 'x' => sub {
     my ($s, $new_value, $old_value) = @_;
     warn "Moving $s from x$old_value to x$new_value";
-  }
+  };
   
   after 'y' => sub {
     my ($s, $new_value, $old_value) = @_;
     warn "Moving $s from y$old_value to y$new_value";
-  }
+  };
   
   package Point3d;
   
@@ -466,6 +492,15 @@ VSO - Very Simple Objects
     isa     => 'Int',
   );
 
+  sub greet { warn "Hello, World!" }
+  
+  before 'greet' => sub {
+    warn "About to greet you";
+  };
+  
+  after 'greet' => sub {
+    warn "I have greeted you";
+  };
 
 =head1 DESCRIPTION
 

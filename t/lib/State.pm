@@ -57,5 +57,36 @@ after 'population' => sub {
   warn "Changed population from '$old_value' to '$new_value'\n";
 };
 
+sub greet
+{
+  my $s = shift;
+  
+  warn "Greetings from ", $s->name, "!\n";
+}# end greet()
+
+before 'greet' => sub {
+  my $s = shift;
+  
+  warn "About to greet you (first-defined, second-run)...\n";
+};
+
+before 'greet' => sub {
+  my $s = shift;
+  
+  warn "About to greet you (second-defined, first-run)...\n";
+};
+
+after 'greet' => sub {
+  my $s = shift;
+  
+  warn "After greeting you (first-defined, first-run)...\n";
+};
+
+after 'greet' => sub {
+  my $s = shift;
+  
+  warn "After greeting you (second-defined, second-run)...\n";
+};
+
 1;# return true:
 

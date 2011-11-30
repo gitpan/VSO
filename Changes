@@ -1,6 +1,9 @@
 
 Changelog for VSO
 
+2011-11-30      v0.007
+  - Now 'before' and 'after' can be used on subs as well as attributes.
+
 2011-11-29      v0.006
   - Added subtypes.
 
