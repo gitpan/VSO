@@ -7,7 +7,7 @@ use Carp qw( confess croak );
 use Scalar::Util qw( weaken );
 use base 'Exporter';
 
-our $VERSION = '0.007';
+our $VERSION = '0.008';
 
 our @EXPORT = qw(
   has
@@ -179,8 +179,11 @@ sub after($&)
     no strict 'refs';
     no warnings 'redefine';
     *{"$class\::$name"} = sub {
-      $orig->( @_ );
+      my $context = defined(wantarray) ? wantarray ? 'list' : 'scalar' : 'void';
+      my ($res,@res);
+      $context eq 'list' ? @res = $orig->( @_ ) : $context eq 'scalar' ? $res = $orig->( @_ ) : $orig->( @_ );
       $sub->( @_ );
+      $context eq 'list' ? return @res : $context eq 'scalar' ? return $res : return;
     };
   }# end if()
 }# end after()

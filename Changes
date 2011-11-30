@@ -1,6 +1,9 @@
 
 Changelog for VSO
 
+2011-11-30      v0.008
+  - wantarray is correctly preserved for before/after wrapped subs.
+
 2011-11-30      v0.007
   - Now 'before' and 'after' can be used on subs as well as attributes.
 

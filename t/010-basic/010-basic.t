@@ -92,7 +92,13 @@ ALTERNATE_TYPES: {
     func  => 'Hello'
   );
   
+  # Void:
   $state->greet();
+  # Scalar:
+  my $val = $state->greet();
+  is $val => 1, "state.greet in scalar context works";
+  my @val = $state->greet();
+  is_deeply \@val, [1..10], "state.greet in list context works";
 };
 
 

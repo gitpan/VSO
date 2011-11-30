@@ -62,6 +62,7 @@ sub greet
   my $s = shift;
   
   warn "Greetings from ", $s->name, "!\n";
+  return wantarray ? ( 1..10 ) : 1;
 }# end greet()
 
 before 'greet' => sub {
