@@ -13,6 +13,13 @@ subtype 'State::Population' =>
   where   { $_ > 0 },
   message { "Population must be greater than zero" };
 
+subtype 'State::FuncRef'  =>
+  as      'CodeRef';
+
+coerce 'State::FuncRef' =>
+  from  'Str',
+  via   sub { my $val = $_; return sub { $val } };
+
 has 'name' => (
   is        => 'ro',
   isa       => 'State::Name',
@@ -33,16 +40,17 @@ has 'population' => (
 );
 
 
-has 'foo' => (
-  is        => 'ro',
-  isa       => 'HashRef[Foo]',
-  required  => 1,
-);
+#has 'foo' => (
+#  is        => 'ro',
+#  isa       => 'HashRef[Foo]',
+#  required  => 1,
+#);
 
 has 'func' => (
   is        => 'ro',
-  isa       => 'CodeRef',
+  isa       => 'State::FuncRef',
   required  => 1,
+  coerce    => 1,
 );
 
 before 'population' => sub {

@@ -5,9 +5,10 @@ use strict;
 use warnings 'all';
 use Carp qw( confess croak );
 use Scalar::Util qw( weaken openhandle );
+use Data::Dumper;
 use base 'Exporter';
 
-our $VERSION = '0.009';
+our $VERSION = '0.010';
 
 our @EXPORT = qw(
   has
@@ -16,9 +17,10 @@ our @EXPORT = qw(
   extends
   
   subtype as where message
+  coerce from via
 );
 
-my $meta = { };
+my $_meta = { };
 
 sub import
 {
@@ -34,9 +36,9 @@ sub import
   } @EXPORT;
   push @{"$caller\::ISA"}, $class if $class eq __PACKAGE__;
   
-  $meta->{ $caller } ||= _new_meta();
+  $_meta->{ $caller } ||= _new_meta();
   no warnings 'redefine';
-  *{"$caller\::meta"} = sub { $meta->{$caller} };
+  *{"$caller\::meta"} = sub { $_meta->{$caller} };
 }# end import()
 
 
@@ -97,8 +99,27 @@ sub _build
       if( $props->{required} )
       {
         my $check = _check_value_isa( $props->{isa}, $s, $new_value );
-        confess "Invalid value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}"
-          unless $check eq 1;
+        unless( $check eq 1 )
+        {
+          if( $props->{coerce} )
+          {
+            # Figure out what time we've got:
+            my $valuetype = _discover_type( $new_value );
+            if( my $coercer = $_meta->{_coercions}->{$props->{isa}}->{$valuetype} )
+            {
+              local $_ = $new_value;
+              $new_value = $coercer->( $s );
+            }
+            else
+            {
+              confess "Invalid value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}";
+            }# end if()
+          }
+          else
+          {
+            confess "Invalid value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}";
+          }# end if()
+        }# end unless()
       }# end if()
     }# end if()
     
@@ -204,6 +225,7 @@ sub has($;@)
     isa       => undef,
     lazy      => 0,
     weak_ref  => 0,
+    coerce    => 0,
     %properties
   };
   
@@ -247,8 +269,27 @@ sub has($;@)
       if( $props->{isa} )
       {
         my $check = _check_value_isa( $props->{isa}, $s, $new_value );
-        croak "New value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}"
-          unless $check eq 1;
+        unless( $check eq 1 )
+        {
+          if( $props->{coerce} )
+          {
+            # Figure out what time we've got:
+            my $valuetype = _discover_type( $new_value );
+            if( my $coercer = $_meta->{_coercions}->{$props->{isa}}->{$valuetype} )
+            {
+              local $_ = $new_value;
+              $new_value = $coercer->( $s );
+            }
+            else
+            {
+              confess "Invalid value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}";
+            }# end if()
+          }
+          else
+          {
+            croak "New value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}";
+          }# end if()
+        }# end unless()
       }# end if()
       
       if( $props->{where} )
@@ -311,20 +352,19 @@ CLOSURE: {
           my $parent = _find_subtype($outer_type, $inner_type)
             or return @parents;
           push @parents, $parent;
-          return $get_parents->( $parent );
+          $get_parents->( $parent );
         };
         $get_parents->( $subtype );
         $parents{$isa_raw} = \@parents;
       }# end if()
       my @type_strata = ( (reverse @parents), $subtype );
-      
       map {
         my $type = $_;
         local $_ = $value;
         return $type->{message}->( $object )
           unless $type->{where}->( $object );
       } @type_strata;
-      
+
       return 1;
     }
     else
@@ -350,6 +390,37 @@ sub _parse_typename
 }# end _parse_typename()
 
 
+sub _discover_type
+{
+  my ($val) = @_;
+  
+  if( my $ref = ref($val) )
+  {
+    return 'ScalarRef' if $ref eq 'SCALAR';
+    return 'ArrayRef' if $ref eq 'ARRAY';
+    return 'HashRef' if $ref eq 'HASH';
+    return 'CodeRef' if $ref eq 'CODE';
+    return 'GlobRef' if $ref eq 'GLOB';
+    return 'RegexpRef' if $ref eq 'Regexp';
+    return 'FileHandle' if openhandle($val);
+    # Otherwise, it's a reference to some kind of object:
+    return $ref;
+  }
+  else
+  {
+    return 'Undef' unless defined($val);
+    return 'Defined' if defined($val) && ! length($val);
+    return 'Bool' if $val =~ m{^(?:0|1)$};
+    return 'Int' if $val =~ m{^\d+$};
+    return 'Num' if $val =~ m{^\d+\.?\d*?$};
+    # ClassName?:
+    (my $fn = "$val.pm") =~ s{::}{/}g;
+    return 'ClassName' if exists($INC{$fn});
+    return 'Str';
+  }# end if()
+}# end _discover_type()
+
+
 sub _check_type_exists
 {
   my $typename = shift;
@@ -359,7 +430,7 @@ sub _check_type_exists
     (my $fn = "$valtype.pm") =~ s{::}{/}g;
     if( $valtype )
     {
-      $meta->{_subtypes}->{$valtype} ||= {
+      $_meta->{_subtypes}->{$valtype} ||= {
         name    => $valtype,
         as      => 'Object',
         where   => sub { 1 },
@@ -368,7 +439,7 @@ sub _check_type_exists
     }# end if()
     if( $reftype eq 'HashRef' )
     {
-      $meta->{_subtypes}->{$typename} ||= {
+      $_meta->{_subtypes}->{$typename} ||= {
         name    => $typename,
         as      => $reftype,
         where   => sub {
@@ -376,9 +447,9 @@ sub _check_type_exists
           my $obj = shift;
           my (@vals) = values %$val;
           my $failed = grep {
-            _check_value_isa( $valtype, undef, $_ );
+            _check_value_isa( $valtype, undef, $_ ) eq 1;
           } @vals;
-          $failed ? return "Must be a $typename" : return 1;
+          $failed ? return 0 : return 1;
         },
         message => sub { "Must be a '$typename'" }
       };
@@ -386,10 +457,16 @@ sub _check_type_exists
     else
     {
       # ArrayRef:
-      $meta->{_subtypes}->{$typename} ||= {
+      $_meta->{_subtypes}->{$typename} ||= {
         name    => $typename,
         as      => $reftype,
-        where   => sub { ! grep { _check_value_isa( $valtype, undef, $_ ) } @$_ },
+        where   => sub {
+          my $failed = grep {
+            my $result = _check_value_isa( $valtype, undef, $_ );
+            $result;
+          } @$_;
+          $failed ? return 0 : return 1;
+        },
         message => sub { "Must be a $typename" }
       };
     }# end if()
@@ -400,7 +477,7 @@ sub _check_type_exists
     unless( _find_subtype($typename) )
     {
       load_class($typename);
-      $meta->{_subtypes}->{$typename} ||= {
+      $_meta->{_subtypes}->{$typename} ||= {
         name    => $typename,
         as      => 'Object',
         where   => sub { 1 },
@@ -425,9 +502,9 @@ CLOSURE: {
         : 0; # NO-OP:
     my ($match) = grep {
       $_ eq $typename
-    } sort {length($b) <=> length($a)} keys %{$meta->{_subtypes}};
+    } sort {length($b) <=> length($a)} keys %{$_meta->{_subtypes}};
     
-    $subtype_cache{$key} = $meta->{_subtypes}->{$match}
+    $subtype_cache{$key} = $_meta->{_subtypes}->{$match}
       if $match;
     $match ? return $subtype_cache{$key} : return;
   }# end _find_subtype()
@@ -461,22 +538,36 @@ sub subtype($;@)
   my ($name, %args) = @_;
   
   confess "Subtype '$name' already exists"
-    if exists($meta->{_subtypes}->{$name});
-  $meta->{_subtypes}->{$name} = {
+    if exists($_meta->{_subtypes}->{$name});
+  $_meta->{_subtypes}->{$name} = {
     name    => $name,
     as      => $args{as},
-    where   => $args{where},
-    message => $args{message},
+    where   => $args{where} || sub { 1 },
+    message => $args{message} || sub { "Must be a valid '$name'" },
   };
-}
-
+}# end subtype()
 sub as          { as => shift, @_   }
 sub where(&)    { where => $_[0]    }
 sub message(&)  { message => $_[0]  }
 
 
+sub coerce($;@)
+{
+  my ($to, %args) = @_;
+  
+  confess "Unknown type '$to'" unless exists $_meta->{_subtypes}->{$to};
+  confess "Unknown type '$args{from}'" unless $_meta->{_subtypes}->{$args{from}};
+  my ($pkg,$filename,$line) = caller;
+  confess "Coercion from '$args{from}' to '$to' is already defined in $filename line $line"
+    if defined($_meta->{_coercions}->{$to}->{$args{from}});
+  $_meta->{_coercions}->{$to}->{$args{from}} = $args{via};
+}# end coerce()
+sub from    { from => shift, @_ }
+sub via(&)  { via  => $_[0]     }
+
+
 # All things spring forth from the formless void:
-$meta->{_subtypes}->{''} = {
+$_meta->{_subtypes}->{''} = {
   as      => '',
   where   => sub { 1 },
   message => sub { '' }
@@ -670,18 +761,11 @@ VSO - Very Simple Objects
 VSO aims to offer a declarative OO style for Perl with very little overhead, without
 being overly-minimalist.
 
-=head2 MOOSE
+VSO is a simplified Perl5 object type system similar to L<Moose>, but simpler.
 
-This B<is not a drop-in replacement> for Moose, Moo, Mo, Mouse or anything like that.
+=head2 TYPES
 
-Those modules are very, very nice and there is a great ecosystem of things that work
-well with them.  If that's what you want - use them instead.
-
-VSO is just minding its own business over here, B<K>eeping B<I>t B<S>uper, B<S>imple.
-
-=head1 TYPES
-
-VSO offers the following type system, based on the Moose type system:
+VSO offers the following type system:
 
   Any
   Item
@@ -713,12 +797,7 @@ B<Rationale:> If it's a 'Maybe[whatever]', just do C<< required => 0 >>
 
 =item RoleName
 
-B<Rationale:> VSO does not currently support 'roles'.  They aren't simple.  Try
-explaining 'roles' to the new guy on your team.
-
-...30 minutes later...
-
-See?  Not simple.
+B<Rationale:> VSO does not currently support 'roles'.
 
 =back
 
