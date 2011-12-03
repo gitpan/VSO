@@ -4,10 +4,10 @@ package VSO;
 use strict;
 use warnings 'all';
 use Carp qw( confess croak );
-use Scalar::Util qw( weaken );
+use Scalar::Util qw( weaken openhandle );
 use base 'Exporter';
 
-our $VERSION = '0.008';
+our $VERSION = '0.009';
 
 our @EXPORT = qw(
   has
@@ -92,10 +92,12 @@ sub _build
     my $new_value = $s->{$name};
     if( $props->{isa} )
     {
+      _check_type_exists( $props->{isa} );
+      
       if( $props->{required} )
       {
         my $check = _check_value_isa( $props->{isa}, $s, $new_value );
-        croak "Invalid value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}"
+        confess "Invalid value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}"
           unless $check eq 1;
       }# end if()
     }# end if()
@@ -202,7 +204,6 @@ sub has($;@)
     isa       => undef,
     lazy      => 0,
     weak_ref  => 0,
-    validate  => 1,
     %properties
   };
   
@@ -245,12 +246,9 @@ sub has($;@)
       
       if( $props->{isa} )
       {
-        if( $props->{validate} )
-        {
-          my $check = _check_value_isa( $props->{isa}, $s, $new_value );
-          croak "New value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}"
-            unless $check eq 1;
-        }# end if()
+        my $check = _check_value_isa( $props->{isa}, $s, $new_value );
+        croak "New value for '$name' isn't a $props->{isa}: '$new_value'@{[ $check eq 0 ? '' : qq(: $check) ]}"
+          unless $check eq 1;
       }# end if()
       
       if( $props->{where} )
@@ -291,89 +289,149 @@ sub has($;@)
 }# end has()
 
 
-sub _check_value_isa
-{
-  my ($isa_raw, $object, $value) = @_;
-  
-  my $is_ok = 0;
-  foreach my $isa ( split /\|/, $isa_raw )
+CLOSURE: {
+  my %parents = ( );
+  sub _check_value_isa
   {
-    last if $is_ok;
-    my ($reftype, $ref_isa) = $isa =~ m{((?:Array|Hash))Ref(?:\[([^\]]+?)\])?};
-    $reftype = uc($reftype);
-    if( $reftype && $ref_isa )
-    {
-      # Make sure that it is the correct type of structure:
-      next unless $reftype eq ref($value);
-      
-      # Make sure that the elements/values are the correct type of thing:
-      if( $reftype eq 'ARRAY' )
-      {
-        next if grep { ! ( $_->isa( $ref_isa ) || ref($_) eq $ref_isa ) } @$value;
-      }
-      elsif( $reftype eq 'HASH' )
-      {
-        next if grep { ! ( $_->isa( $ref_isa ) || ref($_) eq $ref_isa ) } values %$value;
-      }# end if()
-    }# end if()
+    my ($isa_raw, $object, $value) = @_;
     
-    # Simple checks:
-    if( $isa eq 'Str' )
+    my ($outer_type, $inner_type) = _parse_typename($isa_raw);
+    if( my $subtype = _find_subtype($isa_raw) )
     {
-      # No problem.
-      $is_ok = 1;
-    }
-    elsif( $isa eq 'Int' )
-    {
-      no warnings 'numeric';
-      next unless $value eq sprintf('%d', $value);
-    }
-    elsif( $isa eq 'Num' )
-    {
-      next unless $value =~ m{^\d+\.?\d*?$};
-    }
-    elsif( $isa eq 'CodeRef' )
-    {
-      next unless ref($value) eq 'CODE';
-    }
-    elsif( $isa eq 'HashRef' )
-    {
-      next unless ref($value) eq 'HASH';
-    }
-    elsif( $isa eq 'ArrayRef' )
-    {
-      next unless ref($value) eq 'ARRAY';
-    }
-    elsif( $isa eq 'ScalarRef' )
-    {
-      next unless ref($value) eq 'SCALAR';
-    }
-    elsif( $isa eq 'FileHandle' )
-    {
-      next unless UNIVERSAL::isa($value, 'IO::Handle') || ref($value) eq 'GLOB';
-    }
-    elsif( exists($meta->{_subtypes}->{$isa}) )
-    {
-      my $subtype = $meta->{_subtypes}->{$isa};
-      if( _check_value_isa( $subtype->{as}, $object, $value ) )
+      my @parents = ( );
+      if( $parents{$isa_raw} )
       {
-        if( $subtype->{where} )
-        {
-          local $_ = $value;
-          return $subtype->{message}->( $object ) unless $subtype->{where}->( $object );
-        }# end if()
+        @parents = @{ $parents{$isa_raw} };
       }
       else
       {
-        next;
+        my $get_parents; $get_parents = sub {
+          return unless $_[0]->{as};
+          my ($outer_type, $inner_type) = _parse_typename(shift->{as});
+          my $parent = _find_subtype($outer_type, $inner_type)
+            or return @parents;
+          push @parents, $parent;
+          return $get_parents->( $parent );
+        };
+        $get_parents->( $subtype );
+        $parents{$isa_raw} = \@parents;
       }# end if()
+      my @type_strata = ( (reverse @parents), $subtype );
+      
+      map {
+        my $type = $_;
+        local $_ = $value;
+        return $type->{message}->( $object )
+          unless $type->{where}->( $object );
+      } @type_strata;
+      
+      return 1;
+    }
+    else
+    {
+      return "Unknown type '$isa_raw'";
     }# end if()
     
-    $is_ok = 1;
-  }# end foreach()
+    return 1;
+  }# end _check_value_isa()
+};
+
+
+sub _parse_typename
+{
+  my $typename = shift;
   
-  return $is_ok;
-}# end _check_value_isa()
+  if( my ($reftype,$valtype) = $typename =~ m{^((?:Array|Hash)Ref)\[(.+?)\]$} )
+  {
+    return ($reftype, $valtype);
+  }# end if()
+  
+  return $typename;
+}# end _parse_typename()
+
+
+sub _check_type_exists
+{
+  my $typename = shift;
+  
+  if( my ($reftype,$valtype) = $typename =~ m{^((?:Array|Hash)Ref)\[(.+?)\]$} )
+  {
+    (my $fn = "$valtype.pm") =~ s{::}{/}g;
+    if( $valtype )
+    {
+      $meta->{_subtypes}->{$valtype} ||= {
+        name    => $valtype,
+        as      => 'Object',
+        where   => sub { 1 },
+        message => sub { "Must be a '$valtype'" }
+      };
+    }# end if()
+    if( $reftype eq 'HashRef' )
+    {
+      $meta->{_subtypes}->{$typename} ||= {
+        name    => $typename,
+        as      => $reftype,
+        where   => sub {
+          my $val = $_;
+          my $obj = shift;
+          my (@vals) = values %$val;
+          my $failed = grep {
+            _check_value_isa( $valtype, undef, $_ );
+          } @vals;
+          $failed ? return "Must be a $typename" : return 1;
+        },
+        message => sub { "Must be a '$typename'" }
+      };
+    }
+    else
+    {
+      # ArrayRef:
+      $meta->{_subtypes}->{$typename} ||= {
+        name    => $typename,
+        as      => $reftype,
+        where   => sub { ! grep { _check_value_isa( $valtype, undef, $_ ) } @$_ },
+        message => sub { "Must be a $typename" }
+      };
+    }# end if()
+  }
+  else
+  {
+    # Normal class:
+    unless( _find_subtype($typename) )
+    {
+      load_class($typename);
+      $meta->{_subtypes}->{$typename} ||= {
+        name    => $typename,
+        as      => 'Object',
+        where   => sub { 1 },
+        message => sub { "Must be a '$typename'" }
+      };
+    }# end unless()
+  }# end if()
+}# end _check_type_exists()
+
+
+CLOSURE: {
+  my %subtype_cache = ( );
+  sub _find_subtype
+  {
+    my ($typename, $valname) = @_;
+    
+    my $key = join ':', ( grep { defined } ( $typename, $valname ) );
+    exists $subtype_cache{$key} ?
+      defined($subtype_cache{$key}) ?
+        return $subtype_cache{$key}
+        : return
+        : 0; # NO-OP:
+    my ($match) = grep {
+      $_ eq $typename
+    } sort {length($b) <=> length($a)} keys %{$meta->{_subtypes}};
+    
+    $subtype_cache{$key} = $meta->{_subtypes}->{$match}
+      if $match;
+    $match ? return $subtype_cache{$key} : return;
+  }# end _find_subtype()
+};
 
 
 sub _new_meta
@@ -390,21 +448,22 @@ sub load_class
   my $class = shift;
 
   (my $file = "$class.pm") =~ s|::|/|g;
-  unless( $INC{$file} ) {
+#  unless( $INC{$file} ) {
     eval { require $file };
     $INC{$file} ||= $file;
-  }# end unless();
+#  }# end unless();
   $class->import(@_);
 }# end load_class()
 
 
 sub subtype($;@)
 {
-  my ($pkg, %args) = @_;
+  my ($name, %args) = @_;
   
-  confess "Subtype '$pkg' already exists"
-    if exists($meta->{_subtypes}->{$pkg});
-  $meta->{_subtypes}->{$pkg} = {
+  confess "Subtype '$name' already exists"
+    if exists($meta->{_subtypes}->{$name});
+  $meta->{_subtypes}->{$name} = {
+    name    => $name,
     as      => $args{as},
     where   => $args{where},
     message => $args{message},
@@ -416,6 +475,107 @@ sub where(&)    { where => $_[0]    }
 sub message(&)  { message => $_[0]  }
 
 
+# All things spring forth from the formless void:
+$meta->{_subtypes}->{''} = {
+  as      => '',
+  where   => sub { 1 },
+  message => sub { '' }
+};
+
+subtype 'Any' =>
+  as      '',
+  where   { 1 },
+  message { '' };
+
+subtype 'Item'  =>
+  as      '',
+  where   { 1 },
+  message { '' };
+
+  subtype 'Bool' =>
+    as      'Item',
+    where   { m{^(?:1|0)$} },
+    message { "Must be a 1 or a 0" };
+
+  subtype 'Undef' =>
+    as      'Item',
+    where   { ! defined },
+    message { "Must not be defined" };
+
+  subtype 'Defined' =>
+    as      'Item',
+    where   { defined },
+    message { "Must be defined" };
+
+    subtype 'Value' =>
+      as      'Defined',
+      where   { ! ref },
+      message { "Cannot be a reference" };
+
+      subtype 'Str' =>
+        as      'Value',
+        where   { 1 },
+        message { '' };
+
+        subtype 'Num' =>
+          as      'Str',
+          where   { m{^\d+\.?\d*?$} },
+          message { 'Must contain only numbers and decimals' };
+
+          subtype 'Int' =>
+            as      'Num',
+            where   { m{^\d+$} },
+            message { 'Must contain only numbers 0-9' };
+
+        subtype 'ClassName' =>
+          as      'Str',
+          where   { m{^[a-z\:0-9_]+$}i },
+          message { 'Must match m{^[a-z\:0-9_]+$}i' };
+
+    subtype 'Ref' =>
+      as      'Defined',
+      where   { ref },
+      message { 'Must be a reference' };
+
+      subtype 'ScalarRef' =>
+        as      'Ref',
+        where   { ref($_) eq 'SCALAR' },
+        message { 'Must be a scalar reference (ScalarRef)' };
+
+      subtype 'ArrayRef'  =>
+        as      'Ref',
+        where   { ref($_) eq 'ARRAY' },
+        message { 'Must be an array reference (ArrayRef)' };
+
+      subtype 'HashRef' =>
+        as      'Ref',
+        where   {ref($_) eq 'HASH' },
+        message { 'Must be a hash reference (HashRef)' };
+
+      subtype 'CodeRef' =>
+        as      'Ref',
+        where   { ref($_) eq 'CODE' },
+        message { 'Must be a code reference (CodeRef)' };
+
+      subtype 'RegexpRef' =>
+        as      'Ref',
+        where   { ref($_) eq 'Regexp' },
+        message { 'Must be a Regexp' };
+
+      subtype 'GlobRef' =>
+        as      'Ref',
+        where   { ref($_) eq 'GLOB' },
+        message { 'Must be a GlobRef (GLOB)' };
+      
+        subtype 'FileHandle'  =>
+          as      'GlobRef',
+          where   { openhandle($_) },
+          message { 'Must be a FileHandle' };
+          
+      subtype 'Object'  =>
+        as      'Ref',
+        where   { no strict 'refs'; scalar(@{ref($_) . "::ISA"}) },
+        message { 'Must be an object' };
 
 1;# return true:
 
@@ -510,7 +670,57 @@ VSO - Very Simple Objects
 VSO aims to offer a declarative OO style for Perl with very little overhead, without
 being overly-minimalist.
 
-B<NOTE:> This is not a drop-in replacement for Moose, Moo, Mo, Mouse or anything like that.
+=head2 MOOSE
+
+This B<is not a drop-in replacement> for Moose, Moo, Mo, Mouse or anything like that.
+
+Those modules are very, very nice and there is a great ecosystem of things that work
+well with them.  If that's what you want - use them instead.
+
+VSO is just minding its own business over here, B<K>eeping B<I>t B<S>uper, B<S>imple.
+
+=head1 TYPES
+
+VSO offers the following type system, based on the Moose type system:
+
+  Any
+  Item
+      Bool
+      Undef
+      Defined
+          Value
+              Str
+                  Num
+                      Int
+                  ClassName
+          Ref
+              ScalarRef
+              ArrayRef
+              HashRef
+              CodeRef
+              RegexpRef
+              GlobRef
+                  FileHandle
+              Object
+
+Missing from the Moose type system are:
+
+=over 4
+
+=item Maybe[`a]
+
+B<Rationale:> If it's a 'Maybe[whatever]', just do C<< required => 0 >>
+
+=item RoleName
+
+B<Rationale:> VSO does not currently support 'roles'.  They aren't simple.  Try
+explaining 'roles' to the new guy on your team.
+
+...30 minutes later...
+
+See?  Not simple.
+
+=back
 
 =head1 AUTHOR
 

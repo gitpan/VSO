@@ -1,6 +1,15 @@
 
 Changelog for VSO
 
+TODO: Coercions.
+
+2011-12-02      v0.009
+  - Type-checking was re-written.
+  - Subtypes are implemented "correctly".
+  - The full* Moose type-hierarchy is implemented.
+    * excluding RoleName and Maybe[`a]
+  - Added test for leaking memory.
+
 2011-11-30      v0.008
   - wantarray is correctly preserved for before/after wrapped subs.
 

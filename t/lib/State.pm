@@ -41,7 +41,7 @@ has 'foo' => (
 
 has 'func' => (
   is        => 'ro',
-  isa       => 'CodeRef|Str',
+  isa       => 'CodeRef',
   required  => 1,
 );
 

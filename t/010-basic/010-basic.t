@@ -87,6 +87,7 @@ NORMAL: {
 
 
 ALTERNATE_TYPES: {
+last;
   my $state = State->new(
     %args,
     func  => 'Hello'

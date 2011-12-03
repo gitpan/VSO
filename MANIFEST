@@ -1,3 +1,4 @@
+bench.pl
 Changes
 inc/Module/Install.pm
 inc/Module/Install/Base.pm
@@ -11,5 +12,9 @@ lib/VSO.pm
 Makefile.PL
 MANIFEST			This list of files
 META.yml
+perlmonksbench.pl
 t/010-basic/010-basic.t
+t/010-basic/020-memory-leakage.t
+t/lib/MooseState.pm
+t/lib/MoState.pm
 t/lib/State.pm
