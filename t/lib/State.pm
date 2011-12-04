@@ -6,7 +6,7 @@ use VSO;
 subtype 'State::Name' => 
   as      'Str',
   where   { length($_) > 0 },
-  message { 'Must have a length greater than zero' };
+  message { "Must have a length greater than zero - [$_] is invalid." };
 
 subtype 'State::Population' =>
   as      'Int',
@@ -14,11 +14,16 @@ subtype 'State::Population' =>
   message { "Population must be greater than zero" };
 
 subtype 'State::FuncRef'  =>
-  as      'CodeRef';
+  as      'CodeRef',
+  where   sub { 1 };
 
 coerce 'State::FuncRef' =>
   from  'Str',
   via   sub { my $val = $_; return sub { $val } };
+
+coerce 'State::FuncRef' =>
+  from  'CodeRef',
+  via   { $_ };
 
 has 'name' => (
   is        => 'ro',
@@ -40,11 +45,11 @@ has 'population' => (
 );
 
 
-#has 'foo' => (
-#  is        => 'ro',
-#  isa       => 'HashRef[Foo]',
-#  required  => 1,
-#);
+has 'foo' => (
+  is        => 'ro',
+  isa       => 'HashRef[Foo]',
+  required  => 1,
+);
 
 has 'func' => (
   is        => 'ro',

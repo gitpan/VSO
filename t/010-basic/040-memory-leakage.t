@@ -25,5 +25,6 @@ my $state = State->new(
 );
 
 memory_cycle_ok( $state );
+last;
 }
 

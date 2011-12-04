@@ -1,14 +1,92 @@
 #!/usr/bin/perl -w
 
-package Foo;
+package Mega::Doodle;
+use VSO;
+has 'name' => (
+  is        => 'ro',
+  isa       => 'Str',
+  required  => 1,
+);
 
+package Mega::Whammo;
+use VSO;
+has 'name' => (
+  is        => 'ro',
+  isa       => 'Str',
+  required  => 1,
+);
+
+package Foo;
 use VSO;
 
 package Bar;
-
 use VSO;
 extends 'Foo';
 
+package Baz;
+use VSO;
+extends 'Bar';
+has 'attr1';
+
+package Bux;
+use VSO;
+extends 'Baz';
+has 'ro_attr_plain' => (
+  is      => 'ro'
+);
+has 'ro_attr_str' => (
+  is      => 'ro',
+  isa     => 'Any',
+);
+
+package Juan;
+use VSO;
+
+subtype 'SpanishWord' =>
+  as    'Str',
+  where { m{(?:o|a|es)$} },
+  message { 'Spanish words end with o, a or es' };
+
+subtype 'GirlieSpanishWord' =>
+  as      'SpanishWord',
+  where   { m{(?:so)$} },
+  message { 'GirlieSpanishWord ends with so' };
+
+coerce  'SpanishWord' =>
+  from  'Str',
+  via   { $_ .= 'o' };
+
+coerce 'GirlieSpanishWord' =>
+  from  'Str',
+  via   { $_ .= 'so' };
+
+has 'wordo' => (
+  is        => 'ro',
+  isa       => 'SpanishWord',
+  required  => 1,
+  coerce    => 1,
+);
+
+has 'girlie_word' => (
+  is        => 'ro',
+  isa       => 'GirlieSpanishWord',
+  required  => 1,
+  coerce    => 1,
+);
+
+package Objecto;
+use VSO;
+
+has 'md' => (
+  is        => 'ro',
+  isa       => 'Mega::Doodle|Mega::Whammo',
+  required  => 1,
+  coerce    => 1,
+);
+
+coerce 'Mega::Doodle' =>
+  from    'Str',
+  via     { Mega::Doodle->new( name => delete(shift->{md}) ) };
 
 package main;
 
@@ -16,90 +94,65 @@ use strict;
 use warnings 'all';
 use Test::More 'no_plan';
 
-use lib 't/lib';
+DynamicSubtypes: {
+  ok( my $foo = Foo->new(), 'Foo.new' );
+  ok( my $bar = Bar->new(), 'Bar.new' );
+  isa_ok $bar, 'Bar';
+  isa_ok $bar, 'Foo';
+  ok( my $baz = Baz->new(attr1=>'anything'), 'Baz.new' );
+  is $baz->attr1 => 'anything', 'baz.attr1 is correct';
+  ok(
+    my $bux = Bux->new(
+      attr1         => 'anything',
+      ro_attr_plain => 'foo',
+      ro_attr_str   => 'bar',
+    ),
+    'Bux.new'
+  );
 
-use_ok('State');
 
-my %args = (
-  name        => 'Colorado',
-  capital     => 'Denver',
-  population  => 5_000_000,
-  foo         => { blah => Bar->new },
-  func        => sub { }
-);
+  ok(
+    my $hola = Juan->new( wordo => 'hola', girlie_word => 'baz' ),
+    'Juan.new'
+  );
 
-NORMAL: {
-  eval {
-    my $state = State->new();
-  };
-  ok $@, 'constructor without any args fails';
-  eval {
-    my $state = State->new(
-      %args,
-      name  => undef,
-    );
-  };
-  like $@, qr(Required param 'name');
-  
-  eval {
-    my $state = State->new(
-      %args,
-      capital  => undef,
-    );
-  };
-  like $@, qr(Required param 'capital');
-  
-  eval {
-    my $state = State->new(
-      %args,
-      population  => undef,
-    );
-  };
-  like $@, qr(Required param 'population');
-  
-  eval {
-    my $state = State->new(
-      %args,
-      population  => 'a string',
-    );
-  };
-  ok $@, 'population as string in constructor causes failure';
-  like $@, qr(Invalid value for 'population' isn't a State::Population: 'a string'), 'error looks right';
-  
-  my $state = State->new( %args );
-  ok $state, "Got a new state object";
-
-  is $state->name, 'Colorado', 'state.name is correct';
-  is $state->capital, 'Denver', 'state.capital is correct';
-  is $state->population, 5_000_000, 'state.population is correct';
-  
-  eval { $state->name('Texas') };
-  is $state->name, 'Colorado', 'state.name not changed';
-  like $@, qr(Cannot change readonly property 'name'), 'error looks right';
-  
-  $state->population( 8_500_000 );
-  is $state->population, 8_500_000, 'state.population was changed';
-  eval { $state->population('a string') };
-  is $state->population, 8_500_000, 'state.population not changed';
-  like $@, qr(New value for 'population' isn't a State::Population: 'a string'), 'error looks right';
-  
+  ok(
+    my $trucko = Juan->new( wordo => 'truck', girlie_word => 'bazzz' ),
+    'Juan.new(truck -> trucko)'
+  );
+  is $trucko->wordo => 'trucko';
 };
 
 
-ALTERNATE_TYPES: {
-#last;
-  my $state = State->new(
-    %args,
-    func  => 'Hello'
+PackageTypes: {
+
+  ok(
+    my $mega = Mega::Doodle->new( name => 'Frank' ),
+    'Mega::Doodle.new'
+  );
+
+  ok(
+    my $objectA = Objecto->new(
+      md  => Mega::Doodle->new(
+        name  => 'Bob'
+      )
+    ),
+    'Objecto.new(megadoodle object)'
+  );
+
+  ok(
+    my $objectB = Objecto->new(
+      md  => Mega::Whammo->new(
+        name  => 'George'
+      )
+    ),
+    'Objecto.new(megadoodle object)'
   );
   
-  # Void:
-  $state->greet();
-  # Scalar:
-  my $val = $state->greet();
-  is $val => 1, "state.greet in scalar context works";
-  my @val = $state->greet();
-  is_deeply \@val, [1..10], "state.greet in list context works";
+  ok(
+    my $objectC = Objecto->new( md => 'Bob' ),
+    'Objecto.new(name -> Bob)'
+  );
 };
 
 

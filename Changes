@@ -3,6 +3,11 @@ Changelog for VSO
 
 TODO: Coercions.
 
+2011-12-04      v0.011
+  - Almost a total rewrite.
+  - Type-checking was overhauled.
+  - Major speed degredation.
+
 2011-12-03      v0.010
   - Type-checking is still a work-in-progress.  Another rewrite might just do it.
   - Updated description in POD to not be snarky.
