@@ -9,7 +9,7 @@ use Data::Dumper;
 use base 'Exporter';
 use VSO::Subtype;
 
-our $VERSION = '0.011';
+our $VERSION = '0.012';
 
 our @EXPORT = qw(
   has
@@ -133,6 +133,8 @@ sub _validate_field
     my $is_ok = 0;
     ISA: foreach my $isa ( split /\|/, $props->{isa} )
     {
+      $isa =~ s{^(.+?)\[(.+?)\]}{"$1" . "::of::$2"}e
+        if $isa =~ m{^.+?\[.+?\]$};
       TYPE_CHECK: {
         my $current_type = VSO::Subtype->find(_discover_type( $new_value ));
         my $wanted_type = VSO::Subtype->find($isa);
@@ -179,6 +181,7 @@ sub _validate_field
             last ISA;
           }# end if()
         }# end if()
+
       };
       next ISA;
     }# end foreach()
@@ -452,9 +455,24 @@ sub load_class
 sub _add_subtype
 {
   my %args = @_;
-  
-  $args{as} ||= 'VSO::Subtype';
-  return VSO::Subtype->new( %args );
+
+  $args{as} ||= '';
+  $args{as} =~ s{^(.+?)\[(.+?)\]}{"$1" . "::of::$2"}e
+    if $args{as} =~ m{^.+?\[.+?\]$};
+  $args{name} =~ s{^(.+?)\[(.+?)\]}{"$1" . "::of::$2"}e
+    if $args{name} =~ m{^.+?\[.+?\]$};
+  eval <<"PKG";
+package $args{name}; {
+  our \@ISA = qw( VSO::Subtype $args{as} );
+  sub name  { '$args{name}' }
+  sub as    { '$args{as}'   }
+  sub where;
+  sub message;
+}
+PKG
+  no strict 'refs';
+  *{"$args{name}::where"} = $args{where};
+  *{"$args{name}::message"} = $args{message};
 }# end _add_subtype()
 
 
@@ -589,6 +607,7 @@ subtype 'Any' =>
 1;# return true:
 
 
+
 =pod
 
 =head1 NAME
@@ -711,11 +730,11 @@ Missing from the Moose type system are:
 
 =item Maybe[`a]
 
-B<Rationale:> If it's a 'Maybe[whatever]', just do C<< required => 0 >>
+If it's a 'Maybe[whatever]', just do C<< required => 0 >>
 
 =item RoleName
 
-B<Rationale:> VSO does not currently support 'roles'.
+VSO does not currently support 'roles'.
 
 =back
 

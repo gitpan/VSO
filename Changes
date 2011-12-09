@@ -1,7 +1,13 @@
 
 Changelog for VSO
 
-TODO: Coercions.
+TODO: Enums.
+
+2011-12-09      v0.012
+  - Updated the way we deal with subtypes.
+  - 'HashRef[Foo]' is translated -> 'HashRef::of::Foo' and isa HashRef,
+    same goes for ArrayRef[Foo] -> ArrayRef::of::Foo
+  - Basic benchmark shows major speed improvement over v0.011.
 
 2011-12-04      v0.011
   - Almost a total rewrite.

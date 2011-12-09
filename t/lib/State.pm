@@ -29,7 +29,7 @@ has 'name' => (
   is        => 'ro',
   isa       => 'State::Name',
   required  => 1,
-  'where'     => sub { m{Colorado} }
+#  'where'     => sub { m{Colorado} }
 );
 
 has 'capital' => (
