@@ -3,6 +3,10 @@ Changelog for VSO
 
 TODO: Enums.
 
+2011-12-10      v0.013
+  - Moved development to github
+  - Updated META.yml
+
 2011-12-09      v0.012
   - Updated the way we deal with subtypes.
   - 'HashRef[Foo]' is translated -> 'HashRef::of::Foo' and isa HashRef,

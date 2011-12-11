@@ -9,7 +9,7 @@ use Data::Dumper;
 use base 'Exporter';
 use VSO::Subtype;
 
-our $VERSION = '0.012';
+our $VERSION = '0.013';
 
 our @EXPORT = qw(
   has
