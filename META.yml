@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               VSO
-version:            0.013
+version:            0.014
 abstract:           Very Simple Objects
 author:
     - John Drago <jdrago_999@yahoo.com>
@@ -17,6 +17,8 @@ no_index:
         - t
         - inc
 generated_by:       Hand
+resources:
+  repository: git://github.com/jdrago999/VSO.git
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4

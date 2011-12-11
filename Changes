@@ -3,6 +3,9 @@ Changelog for VSO
 
 TODO: Enums.
 
+2011-12-11      v0.014
+  - Fixed 'resources' part of META.yml
+
 2011-12-10      v0.013
   - Moved development to github
   - Updated META.yml
