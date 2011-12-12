@@ -9,7 +9,7 @@ use Data::Dumper;
 use base 'Exporter';
 use VSO::Subtype;
 
-our $VERSION = '0.014';
+our $VERSION = '0.015';
 
 our @EXPORT = qw(
   has
@@ -99,6 +99,10 @@ sub _build_arg
     {
       # Deal with this later.
       return;
+    }
+    else
+    {
+      return $s->{$name} = $value = $props->{default}->( $s );
     }# end if()
   }# end if()
   
@@ -125,10 +129,7 @@ sub _validate_field
   {
     if( ! defined($new_value) )
     {
-      if( $props->{default} )
-      {
-        return $props->{default}->();
-      }# end if()
+      # Nothing?
     }# end if()
     my $is_ok = 0;
     ISA: foreach my $isa ( split /\|/, $props->{isa} )

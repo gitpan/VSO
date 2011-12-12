@@ -3,6 +3,9 @@ Changelog for VSO
 
 TODO: Enums.
 
+2011-12-11      v0.015
+  - The default value was not being properly initialized for new objects.
+
 2011-12-11      v0.014
   - Fixed 'resources' part of META.yml
 
