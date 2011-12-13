@@ -9,7 +9,7 @@ use Data::Dumper;
 use base 'Exporter';
 use VSO::Subtype;
 
-our $VERSION = '0.015';
+our $VERSION = '0.016';
 
 our @EXPORT = qw(
   has
@@ -19,6 +19,7 @@ our @EXPORT = qw(
   
   subtype as where message
   coerce from via
+  enum
 );
 
 my $_meta       = { };
@@ -508,6 +509,27 @@ sub from    { from => shift, @_ }
 sub via(&)  { via  => $_[0]     }
 
 
+sub enum($$)
+{
+  my ($name, $vals) = @_;
+  _add_subtype(
+    name    => $name,
+    as      => 'Str',
+    where   => sub {
+      my $val = $_;
+      no warnings 'uninitialized';
+      for( @$vals ) {
+        return 1 if $_ eq $val;
+      }
+      return 0;
+    },
+    message => sub {
+      "Must be a valid '$name'"
+    }
+  );
+}# end enum($$)
+
+
 # All things spring forth from the formless void:
 
 subtype 'Any' =>
@@ -693,6 +715,18 @@ VSO - Very Simple Objects
   after 'greet' => sub {
     warn "I have greeted you";
   };
+
+
+  package Foo;
+  use VSO;
+
+  enum 'DayOfWeek' => [qw( Sun Mon Tue Wed Thu Fri Sat )];
+
+  has 'day' => (
+    is        => 'ro',
+    isa       => 'DayOfWeek',
+    required  => 1,
+  );
 
 =head1 DESCRIPTION
 

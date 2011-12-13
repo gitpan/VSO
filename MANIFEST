@@ -23,6 +23,7 @@ t/010-basic/040-memory-leakage.t
 t/010-basic/050-more-examples.t
 t/010-basic/060-reftytpes.t
 t/010-basic/070-default-values.t
+t/010-basic/080-enum.t
 t/lib/MooseState.pm
 t/lib/MoState.pm
 t/lib/State.pm
