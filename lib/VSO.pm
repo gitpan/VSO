@@ -9,7 +9,7 @@ use Data::Dumper;
 use base 'Exporter';
 use VSO::Subtype;
 
-our $VERSION = '0.016';
+our $VERSION = '0.017';
 
 our @EXPORT = qw(
   has
@@ -639,8 +639,9 @@ VSO - Very Simple Objects
 
 =head1 SYNOPSIS
 
+Basic point example:
+
   package Plane;
-  
   use VSO;
   
   has 'width' => (
@@ -661,13 +662,12 @@ VSO - Very Simple Objects
 
 
   package Point2d;
-  
   use VSO;
   
-  subtype 'ValidValue' =>
-    as      'Int',
-    where   { $_ >= 0 && $_ <= shift->plane->width },
-    message { 'Value must be between zero and ' . shift->plane->width };
+  subtype 'ValidValue'
+    => as      'Int',
+    => where   { $_ >= 0 && $_ <= shift->plane->width },
+    => message { 'Value must be between zero and ' . shift->plane->width };
   
   has 'plane' => (
     is        => 'ro',
@@ -694,9 +694,10 @@ VSO - Very Simple Objects
     my ($s, $new_value, $old_value) = @_;
     warn "Moving $s from y$old_value to y$new_value";
   };
-  
+
+Fancy 3D Point:
+
   package Point3d;
-  
   use VSO;
   
   extends 'Point2d';
@@ -717,6 +718,8 @@ VSO - Very Simple Objects
   };
 
 
+Enums:
+
   package Foo;
   use VSO;
 
@@ -727,6 +730,42 @@ VSO - Very Simple Objects
     isa       => 'DayOfWeek',
     required  => 1,
   );
+
+Coercions and Subtypes:
+
+  package Ken;
+  use VSO;
+
+  subtype 'Number::Odd'
+    => as 'Int'
+    => where { $_ % 2 }
+    => message { "$_ is not an odd number: %=:" . ($_ % 2) };
+
+  subtype 'Number::Even'
+    => as 'Int'
+    => where { (! $_) || ( $_ % 2 == 0 ) }
+    => message { "$_ is not an even number" };
+
+  coerce 'Number::Odd'
+    => from 'Int'
+    => via  { $_++ };
+
+  coerce 'Number::Even'
+    => from 'Int'
+    => via { $_++ };
+
+  has 'favorite_number' => (
+    is        => 'ro',
+    isa       => 'Number::Odd',
+    required  => 1,
+    coerce    => 1, # Otherwise no coercion is performed.
+  );
+
+  ...
+
+  my $ken = Ken->new( favorite_number => 3 ); # Works
+  my $ken = Ken->new( favorite_number => 6 ); # Works, because of coercion.
+
 
 =head1 DESCRIPTION
 
@@ -766,6 +805,8 @@ Missing from the Moose type system are:
 =item Maybe[`a]
 
 If it's a 'Maybe[whatever]', just do C<< required => 0 >>
+
+I<*This might change...>
 
 =item RoleName
 
