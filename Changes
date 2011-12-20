@@ -1,6 +1,9 @@
 
 Changelog for VSO
 
+2011-12-20      v0.020
+  - Handling of (required => 0) works properly now.
+
 2011-12-14      v0.019
   - Fixed errant pod.
 

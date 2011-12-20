@@ -9,7 +9,7 @@ use Data::Dumper;
 use base 'Exporter';
 use VSO::Subtype;
 
-our $VERSION = '0.019';
+our $VERSION = '0.020';
 
 our @EXPORT = qw(
   has
@@ -126,8 +126,9 @@ sub _validate_field
   
   my $original_type = VSO::Subtype->find(_discover_type( $new_value ));
   my $original_value = $new_value;
-  if( $props->{isa} && $props->{required} )
+  if( 1 || $props->{required} )
   {
+    $props->{isa} ||= 'Any';
     if( ! defined($new_value) )
     {
       # Nothing?
@@ -140,6 +141,13 @@ sub _validate_field
       TYPE_CHECK: {
         my $current_type = VSO::Subtype->find(_discover_type( $new_value ));
         my $wanted_type = VSO::Subtype->find($isa);
+        
+        # Don't worry about Undef when the field isn't required:
+        if( $current_type eq 'Undef' && ! $props->{required} )
+        {
+          $is_ok = 1;
+          last ISA;
+        }# end if()
 
         # Verify that the value matches the entire chain of dependencies:
         if( $current_type->isa( $wanted_type ) || $current_type eq $wanted_type )
@@ -665,8 +673,8 @@ Basic point example:
   use VSO;
   
   subtype 'ValidValue'
-    => as      'Int',
-    => where   { $_ >= 0 && $_ <= shift->plane->width },
+    => as      'Int'
+    => where   { $_ >= 0 && $_ <= shift->plane->width }
     => message { 'Value must be between zero and ' . shift->plane->width };
   
   has 'plane' => (
