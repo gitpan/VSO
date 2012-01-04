@@ -1,6 +1,9 @@
 
 Changelog for VSO
 
+2012-01-04      v0.022
+  - Maybe[Foo] works as expected (now).
+
 2011-12-21      v0.021
   - Maybe[Foo] works.  Becomes Undef|Foo internally.
   - Various minor internal fixes and tweaks around type-checking and validation.

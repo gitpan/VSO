@@ -9,7 +9,7 @@ use Data::Dumper;
 use base 'Exporter';
 use VSO::Subtype;
 
-our $VERSION = '0.021';
+our $VERSION = '0.022';
 
 our @EXPORT = qw(
   has
@@ -135,10 +135,13 @@ sub _validate_field
       my $wanted_type = VSO::Subtype->find( $isa );
       
       # Don't worry about Undef when the field isn't required:
-      if( $current_type eq 'Undef' && ! $props->{required} )
+      if( $current_type eq 'Undef' )
       {
-        $is_ok = 1;
-        last ISA;
+        if( (! $props->{required}) || ( ! defined $original_value ) )
+        {
+          $is_ok = 1;
+          last ISA;
+        }# end if()
       }# end if()
       
       # Verify that the value matches the entire chain of dependencies:
@@ -392,12 +395,12 @@ sub _add_collection_subtype
       $reftype eq 'ArrayRef' ?
         sub {
           my $vals = $_;
-          ! grep {my $itemtype = _discover_type($_); ! ( $itemtype->isa($valtype) ) } @$vals
+          ! grep {! _discover_type($_)->isa($valtype) } @$vals
         }
         :
         sub {
           my $vals = [ values %$_ ];
-          ! grep {my $itemtype = _discover_type($_); ! ( $itemtype->isa($valtype) ) } @$vals
+          ! grep {! _discover_type($_)->isa($valtype) } @$vals
         },
     'message' => sub { "Must be a valid '$type'" },
   );
@@ -787,7 +790,7 @@ VSO offers the following type system:
     Item
         Bool
         Undef
-        Maybe[`a]*
+        Maybe[`a]
         Defined
             Value
                 Str
@@ -804,21 +807,13 @@ VSO offers the following type system:
                     FileHandle
                 Object
 
-Differences from the Moose type system include:
+The key differences are that everything is derived from C<Any> and there are no roles.
 
-=over 4
+VSO does not currently support roles.  I<(This may change soon.)>
 
-=item Maybe[`a] (Different)
+=head1 OBJECT-ORIENTED PROGRAMMING WITH VSO
 
-VSO converts C<Maybe[Foo]> to C<Undef|Foo> and converts C<Maybe[HashRef[Foo]]> to C<Undef|HashRef[Foo]>.
-
-=item RoleName (Missing)
-
-VSO does not currently support 'roles'.
-
-I<(This may change)>.
-
-=back
+It's all about declarative programming.  B<Simple> declarative style.
 
 =head1 AUTHOR
 
