@@ -3,13 +3,13 @@ package VSO;
 
 use strict;
 use warnings 'all';
-use Carp qw( confess croak );
+use Carp qw( confess  );
 use Scalar::Util qw( weaken openhandle );
 use Data::Dumper;
 use base 'Exporter';
 use VSO::Subtype;
 
-our $VERSION = '0.022';
+our $VERSION = '0.023';
 
 our @EXPORT = qw(
   has
@@ -31,6 +31,7 @@ sub import
   import warnings;
   $^H |= 1538;
   my $class = shift;
+  my %args = @_;
   my $caller = caller;
   return if $caller eq __PACKAGE__;
   no strict 'refs';
@@ -38,10 +39,15 @@ sub import
     *{"$caller\::$_"} = \&{$_}
   } @EXPORT;
   push @{"$caller\::ISA"}, $class if $class eq __PACKAGE__;
+  $args{asa} ||= [ ];
+  $args{asa} = [$args{asa}] if $args{asa} && ! ref($args{asa});
+  push @{"$caller\::ISA"}, grep { load_class($_); 1 } @{ $args{asa} };
   
   $_meta->{ $caller } ||= _new_meta();
   no warnings 'redefine';
   *{"$caller\::meta"} = sub { $_meta->{$caller} };
+  
+  _extend_class( $caller => @{$args{asa}} ) if @{$args{asa}};
 }# end import()
 
 
@@ -90,7 +96,7 @@ sub _build_arg
   # No value, no default and it's required:
   if( $props->{required} && (! defined($value) ) && (! $props->{default}) )
   {
-    croak "Required param '$name' is required but was not provided.";
+    confess "Required param '$name' is required but was not provided.";
   }
   # No value, but we have a default:
   elsif( $props->{default} && (! defined($value) ) )
@@ -194,7 +200,7 @@ sub _validate_field
   unless( $is_ok )
   {
     local $_ = $original_value;
-    croak "Invalid value for @{[ref($s)]}.$name: isn't a $props->{isa}: [$original_type] '$_'" . (eval{ ': ' . $props->{isa}->message($s) }||'');
+    confess "Invalid value for @{[ref($s)]}.$name: isn't a $props->{isa}: [$original_type] '$_'" . (eval{ ': ' . $props->{isa}->message($s) }||'');
   }# end unless()
   
   return $new_value;
@@ -204,6 +210,14 @@ sub _validate_field
 sub extends(@)
 {
   my $class = caller;
+  
+  _extend_class($class => @_);
+}# end extends()
+
+
+sub _extend_class
+{
+  my $class = shift;
   
   no strict 'refs';
   my $meta = $class->meta();
@@ -218,7 +232,7 @@ sub extends(@)
       $meta->{triggers}->{$_} = $parent_meta->{triggers}->{$_}
     } keys %{ $parent_meta->{triggers} };
   } @_;
-}# end extends()
+}# end _extend_class()
 
 
 sub before($&)
@@ -228,7 +242,7 @@ sub before($&)
   my $meta = $class->meta;
   
   # Sanity:
-  croak "You must define property $class.$name before adding triggers to it"
+  confess "You must define property $class.$name before adding triggers to it"
     unless exists($meta->{fields}->{$name}) || $class->can($name);
   
   if( exists($meta->{fields}->{$name}) )
@@ -256,7 +270,7 @@ sub after($&)
   my $meta = $class->meta;
   
   # Sanity:
-  croak "You must define property $class.$name before adding triggers to it"
+  confess "You must define property $class.$name before adding triggers to it"
     unless exists($meta->{fields}->{$name}) || $class->can($name);
   
   if( exists($meta->{fields}->{$name}) )
@@ -344,7 +358,7 @@ sub has($;@)
     
     if( $props->{is} eq 'ro' )
     {
-      croak "Cannot change readonly property '$name'";
+      confess "Cannot change readonly property '$name'";
     }
     elsif( $props->{is} eq 'rw' )
     {
@@ -773,6 +787,15 @@ Coercions and Subtypes:
 
   my $ken = Ken->new( favorite_number => 3 ); # Works
   my $ken = Ken->new( favorite_number => 6 ); # Works, because of coercion.
+
+Compile-time Extension Syntax new in v0.023:
+
+  package Root::Foo;
+  use VSO;
+  has ...;
+  
+  package Subclass::Foo;
+  use VSO asa => 'Root::Foo'; # inheritance during compile-time, not runtime.
 
 
 =head1 DESCRIPTION

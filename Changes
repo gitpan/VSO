@@ -1,6 +1,13 @@
 
 Changelog for VSO
 
+2012-02029      v0.023
+  - Added special import arg 'use VSO asa => "Foo::Class"' and 'use VSO asa => [qw(Foo::Class Bar::Class)]'
+  - Classes that use VSO with the special 'asa' arg will inherit from the classes
+    listed at *COMPILE TIME*.
+  - 'asa' works the same way as 'extends', but instead of during runtime, it happens
+    during compilation.
+
 2012-01-04      v0.022
   - Maybe[Foo] works as expected (now).
 
