@@ -9,7 +9,7 @@ use Data::Dumper;
 use base 'Exporter';
 use VSO::Subtype;
 
-our $VERSION = '0.023';
+our $VERSION = '0.024';
 
 our @EXPORT = qw(
   has
@@ -39,15 +39,15 @@ sub import
     *{"$caller\::$_"} = \&{$_}
   } @EXPORT;
   push @{"$caller\::ISA"}, $class if $class eq __PACKAGE__;
-  $args{asa} ||= [ ];
-  $args{asa} = [$args{asa}] if $args{asa} && ! ref($args{asa});
-  push @{"$caller\::ISA"}, grep { load_class($_); 1 } @{ $args{asa} };
+  $args{extends} ||= [ ];
+  $args{extends} = [$args{extends}] if $args{extends} && ! ref($args{extends});
+  push @{"$caller\::ISA"}, grep { load_class($_); 1 } @{ $args{extends} };
   
   $_meta->{ $caller } ||= _new_meta();
   no warnings 'redefine';
   *{"$caller\::meta"} = sub { $_meta->{$caller} };
   
-  _extend_class( $caller => @{$args{asa}} ) if @{$args{asa}};
+  _extend_class( $caller => @{$args{extends}} ) if @{$args{extends}};
 }# end import()
 
 
@@ -409,11 +409,15 @@ sub _add_collection_subtype
       $reftype eq 'ArrayRef' ?
         sub {
           my $vals = $_;
+          # Handle an empty value:
+          return 1 unless @$vals;
           ! grep {! _discover_type($_)->isa($valtype) } @$vals
         }
         :
         sub {
           my $vals = [ values %$_ ];
+          # Handle an empty value:
+          return 1 unless @$vals;
           ! grep {! _discover_type($_)->isa($valtype) } @$vals
         },
     'message' => sub { "Must be a valid '$type'" },
@@ -467,7 +471,7 @@ sub load_class
   (my $file = "$class.pm") =~ s|::|/|g;
   no strict 'refs';
   eval { require $file unless defined(@{"$class\::ISA"}) || $INC{$file}; 1 }
-    or die $@;
+    or die "Can't require $file: $@";
   $INC{$file} ||= $file;
   $class->import(@_);
 }# end load_class()
@@ -759,14 +763,14 @@ Coercions and Subtypes:
   use VSO;
 
   subtype 'Number::Odd'
-    => as 'Int'
-    => where { $_ % 2 }
-    => message { "$_ is not an odd number: %=:" . ($_ % 2) };
+    => as       'Int'
+    => where    { $_ % 2 }
+    => message  { "$_ is not an odd number: %=:" . ($_ % 2) };
 
   subtype 'Number::Even'
-    => as 'Int'
-    => where { (! $_) || ( $_ % 2 == 0 ) }
-    => message { "$_ is not an even number" };
+    => as       'Int'
+    => where    { (! $_) || ( $_ % 2 == 0 ) }
+    => message  { "$_ is not an even number" };
 
   coerce 'Number::Odd'
     => from 'Int'
@@ -774,7 +778,7 @@ Coercions and Subtypes:
 
   coerce 'Number::Even'
     => from 'Int'
-    => via { $_ % 2 ? $_ + 1 : $_ };
+    => via  { $_ % 2 ? $_ + 1 : $_ };
 
   has 'favorite_number' => (
     is        => 'ro',
@@ -788,14 +792,17 @@ Coercions and Subtypes:
   my $ken = Ken->new( favorite_number => 3 ); # Works
   my $ken = Ken->new( favorite_number => 6 ); # Works, because of coercion.
 
-Compile-time Extension Syntax new in v0.023:
+Compile-time Extension Syntax new in v0.024:
 
   package Root::Foo;
   use VSO;
   has ...;
   
   package Subclass::Foo;
-  use VSO asa => 'Root::Foo'; # inheritance during compile-time, not runtime.
+  use VSO extends => 'Foo::Class'; # inheritance during compile-time, not runtime.
+  
+  package Subclass::Bar;
+  use VSO extends => [qw( Foo::Class Bar::Class )]; # extend many at once.
 
 
 =head1 DESCRIPTION
@@ -834,9 +841,13 @@ The key differences are that everything is derived from C<Any> and there are no 
 
 VSO does not currently support roles.  I<(This may change soon.)>
 
-=head1 OBJECT-ORIENTED PROGRAMMING WITH VSO
+=head2 "Another" Moose?
 
-It's all about declarative programming.  B<Simple> declarative style.
+Yes, but not exactly.  VSO is B<not> intended as a drop-in replacement
+for Moose, Mouse, Moo or Mo.  They are all doing a fantastic job and you should use them.
+
+We've got a ways to go before version 1.000 is released, so don't get too excited
+if the documentation isn't quite finished or it's not clear why VSO was made.
 
 =head1 AUTHOR
 

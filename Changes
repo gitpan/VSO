@@ -1,7 +1,12 @@
 
 Changelog for VSO
 
-2012-02029      v0.023
+2012-02-22      v0.024
+  - Changed 'use VSO asa => "Foo::Class"' to 'use VSO extends => "Foo::Class"'
+  - Documented the compile-time version of multiple-inheritance also: 'use VSO => [qw( Foo Bar )]'
+  - Updated POD to explain just a tiny bit what's going on here.
+
+2012-02-19      v0.023
   - Added special import arg 'use VSO asa => "Foo::Class"' and 'use VSO asa => [qw(Foo::Class Bar::Class)]'
   - Classes that use VSO with the special 'asa' arg will inherit from the classes
     listed at *COMPILE TIME*.
