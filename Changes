@@ -1,6 +1,9 @@
 
 Changelog for VSO
 
+2012-05-07      v0.025
+  - DEPRECATED do not use.
+
 2012-02-22      v0.024
   - Changed 'use VSO asa => "Foo::Class"' to 'use VSO extends => "Foo::Class"'
   - Documented the compile-time version of multiple-inheritance also: 'use VSO => [qw( Foo Bar )]'

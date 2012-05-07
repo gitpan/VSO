@@ -9,7 +9,7 @@ use Data::Dumper;
 use base 'Exporter';
 use VSO::Subtype;
 
-our $VERSION = '0.024';
+our $VERSION = '0.025';
 
 our @EXPORT = qw(
   has
@@ -662,6 +662,10 @@ subtype 'Any' =>
 =head1 NAME
 
 VSO - Very Simple Objects
+
+=head1 DEPRECATED
+
+Do not use.  Look at L<Mo>, L<Moo>, L<Mouse> or L<Moose> instead.
 
 =head1 SYNOPSIS
 
